@@ -1,22 +1,46 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
+import { useAuth } from "@/hooks/use-auth";
+import { LayoutDashboard, FileEdit, Users, FolderOpen, FileText, Settings, LogOut, Menu, X } from "lucide-react";
+import { getInitials } from "@/lib/utils";
 
 export default function AdminWorkspaceLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, isAuthenticated, isLoading, isAdmin, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading) {
+      if (!isAuthenticated) {
+        router.push("/login");
+      } else if (!isAdmin) {
+        router.push("/dashboard");
+      }
+    }
+  }, [isLoading, isAuthenticated, isAdmin, router]);
+
+  if (isLoading || !isAuthenticated || !isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="w-8 h-8 border-4 border-[#D00113] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   // All URL paths explicitly target the clear /admin sub-directory tree
   const adminNavItems = [
-    { name: "Overview Desk", href: "/admin/dashboard", icon: "💎" },
-    { name: "Manage Mocks", href: "/admin/tests", icon: "🛠️" },
-    { name: "Aspirant Roster", href: "/admin/students", icon: "👥" },
-    { name: "PDF Resources", href: "/admin/resources", icon: "📂" },
-    { name: "Payout Audits", href: "/admin/reports", icon: "🧾" },
-    { name: "System Config", href: "/admin/settings", icon: "⚙️" },
+    { name: "Overview Desk", href: "/admin/dashboard", icon: <LayoutDashboard size={18} /> },
+    { name: "Manage Courses", href: "/admin/courses", icon: <FolderOpen size={18} /> },
+    { name: "Manage Mocks", href: "/admin/tests", icon: <FileEdit size={18} /> },
+    { name: "Aspirant Roster", href: "/admin/students", icon: <Users size={18} /> },
+    { name: "PDF Resources", href: "/admin/resources", icon: <FileText size={18} /> },
+    { name: "Payments & Audits", href: "/admin/reports", icon: <FileText size={18} /> },
+    { name: "System Config", href: "/admin/settings", icon: <Settings size={18} /> },
   ];
 
   return (
@@ -31,7 +55,7 @@ export default function AdminWorkspaceLayout({ children }: { children: React.Rea
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
           className="p-2 text-slate-400 hover:text-white rounded-md text-xl"
         >
-          {isMobileMenuOpen ? "✕" : "☰"}
+          {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
       </header>
 
@@ -40,7 +64,7 @@ export default function AdminWorkspaceLayout({ children }: { children: React.Rea
         <div className="md:hidden fixed inset-x-0 top-[49px] bg-slate-900 border-b border-slate-800 z-40 shadow-xl animate-in slide-in-from-top duration-200">
           <nav className="p-4 space-y-1">
             {adminNavItems.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
               return (
                 <Link
                   key={item.href}
@@ -52,15 +76,15 @@ export default function AdminWorkspaceLayout({ children }: { children: React.Rea
                       : "text-slate-400 hover:bg-slate-800 hover:text-white"
                   }`}
                 >
-                  <span>{item.icon}</span>
+                  <span className={isActive ? "text-white" : "text-slate-500"}>{item.icon}</span>
                   {item.name}
                 </Link>
               );
             })}
             <div className="pt-4 mt-2 border-t border-slate-800">
-              <Link href="/login" className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:text-red-400">
-                <span>🚪</span> Terminate Admin Token
-              </Link>
+              <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:text-red-400">
+                <LogOut size={18} /> Terminate Admin Token
+              </button>
             </div>
           </nav>
         </div>
@@ -88,7 +112,7 @@ export default function AdminWorkspaceLayout({ children }: { children: React.Rea
           {/* Admin Command Nav Stack */}
           <nav className="space-y-1">
             {adminNavItems.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
               return (
                 <Link
                   key={item.href}
@@ -99,7 +123,7 @@ export default function AdminWorkspaceLayout({ children }: { children: React.Rea
                       : "text-slate-400 hover:bg-slate-900 hover:text-white"
                   }`}
                 >
-                  <span className="text-sm normal-case">{item.icon}</span>
+                  <span className={isActive ? "text-white" : "text-slate-500"}>{item.icon}</span>
                   {item.name}
                 </Link>
               );
@@ -109,18 +133,24 @@ export default function AdminWorkspaceLayout({ children }: { children: React.Rea
 
         {/* Admin Operational Profile Identity Footer */}
         <div className="border-t border-slate-900 pt-4">
-          <Link href="/login" className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-900 transition-all group">
+          <div className="flex items-center justify-between p-2 rounded-xl group transition-all">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-red-600 text-white font-black text-xs flex items-center justify-center">
-                SU
+              <div className="w-8 h-8 rounded-lg bg-red-600 text-white font-black text-xs flex items-center justify-center relative overflow-hidden">
+                {user?.avatar ? (
+                  <Image src={user.avatar} alt={user.name} fill className="object-cover" />
+                ) : (
+                  getInitials(user?.name || "Admin")
+                )}
               </div>
               <div>
-                <p className="text-xs font-bold text-slate-200">SuperUser Node</p>
+                <p className="text-xs font-bold text-slate-200 line-clamp-1">{user?.name || "SuperUser Node"}</p>
                 <p className="text-[9px] font-bold font-mono text-slate-500">SECURE_LEVEL//01</p>
               </div>
             </div>
-            <span className="text-slate-500 group-hover:text-[#D00113] text-xs transition-colors">🚪</span>
-          </Link>
+            <button onClick={logout} className="text-slate-500 hover:text-[#D00113] text-xs transition-colors p-1" title="Logout">
+              <LogOut size={16} />
+            </button>
+          </div>
         </div>
       </aside>
 

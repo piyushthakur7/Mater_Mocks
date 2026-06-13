@@ -1,19 +1,92 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { mockTestService } from "@/services/mock-test.service";
+import { attemptService } from "@/services/attempt.service";
+import { MockTest } from "@/types/mock-test";
+import { TestAttempt } from "@/types/attempt";
+import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 
-export default function InteractiveTestEnginePage() {
+interface PageProps {
+  params: Promise<{ testId: string }>;
+}
+
+export default function InteractiveTestEnginePage({ params }: PageProps) {
+  const unwrappedParams = use(params);
+  const router = useRouter();
+  
+  const [test, setTest] = useState<MockTest | null>(null);
+  const [attempt, setAttempt] = useState<TestAttempt | null>(null);
+  
   const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<number, number>>({});
-  const [timeLeft, setTimeLeft] = useState(1200); // 20 Minutes in seconds
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({}); // questionId -> optionId
+  const [timeLeft, setTimeLeft] = useState(0); 
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const initializeTest = async () => {
+      try {
+        // Fetch test details to get questions
+        const testRes = await mockTestService.getById(unwrappedParams.testId);
+        if (!testRes.success || !testRes.data) {
+          toast.error("Test not found");
+          router.push("/tests");
+          return;
+        }
+        
+        setTest(testRes.data);
+        setTimeLeft(testRes.data.settings.duration * 60);
+
+        // Start attempt
+        const attemptRes = await attemptService.start(unwrappedParams.testId);
+        if (attemptRes.success && attemptRes.data) {
+          setAttempt(attemptRes.data);
+          
+          // Pre-fill any existing answers if the attempt was already started and resumed
+          if (attemptRes.data.answers) {
+            const answersMap: Record<string, string> = {};
+            attemptRes.data.answers.forEach((ans) => {
+              answersMap[ans.question.toString()] = ans.selectedOption.toString();
+            });
+            setSelectedAnswers(answersMap);
+          }
+          
+          // Adjust time left based on startTime if it's a resumed attempt
+          if (attemptRes.data.startTime) {
+            const startTime = new Date(attemptRes.data.startTime).getTime();
+            const now = new Date().getTime();
+            const elapsedSeconds = Math.floor((now - startTime) / 1000);
+            const remaining = (testRes.data.settings.duration * 60) - elapsedSeconds;
+            setTimeLeft(remaining > 0 ? remaining : 0);
+          }
+        }
+      } catch (error: any) {
+        toast.error(error.message || "Failed to start test");
+        router.push("/tests");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeTest();
+  }, [unwrappedParams.testId, router]);
 
   // Live timer simulation effect
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (isLoading || isSubmitting || !test) return;
+    
+    if (timeLeft <= 0) {
+      handleFinalSubmit();
+      return;
+    }
+    
     const interval = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
     return () => clearInterval(interval);
-  }, [timeLeft]);
+  }, [timeLeft, isLoading, isSubmitting, test]);
 
   const formatTimer = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -21,15 +94,54 @@ export default function InteractiveTestEnginePage() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const mockQuestions = [
-    { id: 1, text: "Points P, Q, R, S, T, U and V are placed in a directional grid network. Q is 12m North of P. R is 10m West of Q. S is 6m South of R. T is 5m East of S. What is the shortest computational distance between P and T?", options: ["13 meters", "15 meters", "11 meters", "8 meters"] },
-    { id: 2, text: "In a certain code language, 'BANKING' is written as 'OBKCCFM' and 'INSURANCE' is written as 'TOVBSFMDJ'. Following this exact logical rule matrix, how will 'MOCKTEST' be represented?", options: ["LBBKSDJS", "NPDLSDST", "OPDLTEFU", "NPDLTFST"] },
-    { id: 3, text: "Statement: All Puzzles are Syllogisms. No Syllogism is a Conclusion. Some Conclusions are Data Sets. Determine which derived structural argument holds true integrity thresholds.", options: ["Some Puzzles are Conclusions", "No Puzzle is a Conclusion", "All Data Sets are Syllogisms", "None of the above matches"] },
-  ];
+  const handleOptionSelect = async (questionId: string, optionId: string) => {
+    if (!attempt || isSubmitting) return;
 
-  const handleOptionSelect = (optionIdx: number) => {
-    setSelectedAnswers({ ...selectedAnswers, [currentQuestion]: optionIdx });
+    // Optimistic UI update
+    setSelectedAnswers({ ...selectedAnswers, [questionId]: optionId });
+
+    try {
+      // Sync with server
+      await attemptService.answer(attempt._id, { questionId, selectedOptionId: optionId });
+    } catch (error) {
+      toast.error("Failed to save answer. Please check your connection.");
+    }
   };
+
+  const handleFinalSubmit = async () => {
+    if (!attempt || isSubmitting) return;
+    setIsSubmitting(true);
+    
+    try {
+      await attemptService.submit(attempt._id);
+      await attemptService.evaluate(attempt._id);
+      toast.success("Test submitted successfully!");
+      router.push(`/reports/${attempt._id}`);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to submit test");
+      setIsSubmitting(false); // Let them try again
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="fixed inset-0 bg-slate-100 flex flex-col items-center justify-center z-50">
+        <Loader2 className="w-10 h-10 text-[#D00113] animate-spin mb-4" />
+        <h2 className="text-sm font-bold text-slate-600 uppercase tracking-widest">Preparing Environment...</h2>
+      </div>
+    );
+  }
+
+  if (!test || !attempt || !test.questions || test.questions.length === 0) {
+    return (
+      <div className="fixed inset-0 bg-slate-100 flex flex-col items-center justify-center z-50">
+        <h2 className="text-xl font-bold text-slate-800 mb-4">Error loading test</h2>
+        <Link href="/tests" className="px-6 py-2.5 bg-[#D00113] text-white rounded-xl text-sm font-bold">Return to Dashboard</Link>
+      </div>
+    );
+  }
+
+  const currentQObj = test.questions[currentQuestion];
 
   return (
     <div className="fixed inset-0 bg-slate-100 flex flex-col z-50 animate-in fade-in duration-200 select-none">
@@ -38,7 +150,7 @@ export default function InteractiveTestEnginePage() {
       <header className="h-14 bg-[#1A1A1A] text-white px-6 flex items-center justify-between border-b border-slate-800">
         <div className="flex items-center gap-3">
           <span className="text-xs font-black tracking-wider bg-[#D00113] px-2.5 py-1 rounded">LIVE RUNTIME</span>
-          <span className="text-xs font-bold text-slate-300">SBI PO Grand Mock - 01 // Section: Reasoning Ability</span>
+          <span className="text-xs font-bold text-slate-300">{test.title} // Section: {test.course?.title || "General"}</span>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right">
@@ -54,27 +166,35 @@ export default function InteractiveTestEnginePage() {
       <div className="flex-1 flex overflow-hidden">
         
         {/* LEFT WORKSPACE: Question & Submission Panel */}
-        <div className="flex-1 flex flex-col justify-between bg-white overflow-y-auto p-8 lg:p-12">
+        <div className="flex-1 flex flex-col justify-between bg-white overflow-y-auto p-8 lg:p-12 relative">
+          
+          {isSubmitting && (
+            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
+              <Loader2 className="w-12 h-12 text-[#D00113] animate-spin mb-4" />
+              <h2 className="text-lg font-bold text-slate-800">Submitting Assessment...</h2>
+              <p className="text-sm text-slate-500">Please do not close this window.</p>
+            </div>
+          )}
+
           <div className="max-w-3xl w-full mx-auto space-y-8">
             
             {/* Question Identity Indicator */}
-            <div className="border-b border-slate-100 pb-4">
-              <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider">Question Reference {mockQuestions[currentQuestion].id} of {mockQuestions.length}</h2>
+            <div className="border-b border-slate-100 pb-4 flex justify-between items-center">
+              <h2 className="text-sm font-black text-slate-400 uppercase tracking-wider">Question Reference {currentQuestion + 1} of {test.questions.length}</h2>
+              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">Marks: +{test.settings.marksPerQuestion} / -{test.settings.negativeMarking}</span>
             </div>
 
             {/* Prompt String Description */}
-            <p className="text-slate-800 font-semibold text-base leading-relaxed">
-              {mockQuestions[currentQuestion].text}
-            </p>
+            <div className="text-slate-800 font-semibold text-base leading-relaxed prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: currentQObj.questionText }} />
 
             {/* Multiple Choice Radio List */}
             <div className="space-y-3 pt-2">
-              {mockQuestions[currentQuestion].options.map((option, idx) => {
-                const isSelected = selectedAnswers[currentQuestion] === idx;
+              {currentQObj.options.map((option, idx) => {
+                const isSelected = selectedAnswers[currentQObj._id!] === option._id;
                 return (
                   <button
-                    key={idx}
-                    onClick={() => handleOptionSelect(idx)}
+                    key={option._id}
+                    onClick={() => handleOptionSelect(currentQObj._id!, option._id!)}
                     className={`w-full text-left px-5 py-4 rounded-xl border text-sm font-bold transition-all flex items-center justify-between group ${
                       isSelected
                         ? "border-[#D00113] bg-red-50/40 text-[#D00113]"
@@ -82,14 +202,14 @@ export default function InteractiveTestEnginePage() {
                     }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className={`w-6 h-6 rounded-md flex items-center justify-center text-xs border ${
+                      <span className={`w-6 h-6 rounded-md flex items-center justify-center text-xs border shrink-0 ${
                         isSelected ? "bg-[#D00113] text-white border-[#D00113]" : "bg-slate-100 border-slate-200 text-slate-500 font-bold"
                       }`}>
                         {String.fromCharCode(65 + idx)}
                       </span>
-                      <span>{option}</span>
+                      <span dangerouslySetInnerHTML={{ __html: option.text }} />
                     </div>
-                    <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? "border-[#D00113]" : "border-slate-300"}`}>
+                    <div className={`shrink-0 w-4 h-4 rounded-full border flex items-center justify-center ${isSelected ? "border-[#D00113]" : "border-slate-300"}`}>
                       {isSelected && <div className="w-2 h-2 rounded-full bg-[#D00113]" />}
                     </div>
                   </button>
@@ -108,20 +228,21 @@ export default function InteractiveTestEnginePage() {
               ← Previous MCQ
             </button>
             
-            {currentQuestion < mockQuestions.length - 1 ? (
+            {currentQuestion < test.questions.length - 1 ? (
               <button
-                onClick={() => setCurrentQuestion((prev) => Math.min(mockQuestions.length - 1, prev + 1))}
+                onClick={() => setCurrentQuestion((prev) => Math.min(test.questions.length - 1, prev + 1))}
                 className="px-6 py-2.5 bg-[#1A1A1A] hover:bg-slate-800 text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all"
               >
                 Save & Next →
               </button>
             ) : (
-              <Link
-                href="/reports/sbi-po-01-result"
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-md shadow-emerald-600/10 transition-all text-center"
+              <button
+                onClick={handleFinalSubmit}
+                disabled={isSubmitting}
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow-md shadow-emerald-600/10 transition-all text-center flex items-center gap-2"
               >
                 Submit Exam Script ✓
-              </Link>
+              </button>
             )}
           </div>
         </div>
@@ -135,13 +256,13 @@ export default function InteractiveTestEnginePage() {
             </div>
 
             {/* Grid Mapping Core Output */}
-            <div className="grid grid-cols-4 gap-2.5">
-              {mockQuestions.map((q, idx) => {
+            <div className="grid grid-cols-4 gap-2.5 max-h-[60vh] overflow-y-auto pb-4 pr-1">
+              {test.questions.map((q, idx) => {
                 const isCurrent = currentQuestion === idx;
-                const isAnswered = selectedAnswers[idx] !== undefined;
+                const isAnswered = selectedAnswers[q._id!] !== undefined;
                 return (
                   <button
-                    key={q.id}
+                    key={q._id}
                     onClick={() => setCurrentQuestion(idx)}
                     className={`h-11 rounded-lg text-xs font-black border transition-all flex items-center justify-center ${
                       isCurrent
@@ -151,7 +272,7 @@ export default function InteractiveTestEnginePage() {
                         : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"
                     }`}
                   >
-                    {q.id.toString().padStart(2, "0")}
+                    {(idx + 1).toString().padStart(2, "0")}
                   </button>
                 );
               })}

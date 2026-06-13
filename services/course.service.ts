@@ -1,0 +1,24 @@
+import { apiClient } from "@/lib/api-client";
+import { Course } from "@/types/course";
+import { ApiResponse, PaginatedResponse } from "@/types/api";
+
+export const courseService = {
+  getAll: (params?: any) => apiClient.get<any, PaginatedResponse<Course>>("/courses", { params }),
+  
+  getById: (id: string) => apiClient.get<any, ApiResponse<Course>>(`/courses/${id}`),
+  
+  getMyEnrolled: (params?: any) => apiClient.get<any, PaginatedResponse<Course>>("/courses/my/enrolled", { params }),
+  
+  enroll: (id: string) => apiClient.post<any, ApiResponse<any>>(`/courses/${id}/enroll`),
+  
+  // Admin only
+  create: (data: any) => apiClient.post<any, ApiResponse<Course>>("/courses", data),
+  
+  update: (id: string, data: any) => apiClient.patch<any, ApiResponse<Course>>(`/courses/${id}`, data),
+  
+  delete: (id: string) => apiClient.delete<any, ApiResponse<null>>(`/courses/${id}`),
+  
+  publish: (id: string) => apiClient.post<any, ApiResponse<Course>>(`/courses/${id}/publish`),
+  
+  unpublish: (id: string) => apiClient.post<any, ApiResponse<Course>>(`/courses/${id}/unpublish`),
+};

@@ -1,20 +1,39 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
+import { useAuth } from "@/hooks/use-auth";
+import { LayoutDashboard, FileText, BookOpen, BarChart2, Settings, LogOut, Menu, X, Bell } from "lucide-react";
+import { getInitials } from "@/lib/utils";
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  if (isLoading || !isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-4 border-[#D00113] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
   const navigationItems = [
-    { name: "Dashboard", href: "/dashboard", icon: "📊" },
-    { name: "Mock Tests", href: "/tests", icon: "📝" },
-    { name: "Study Resources", href: "/resources", icon: "📚" },
-    { name: "Performance Reports", href: "/reports", icon: "📈" },
-    { name: "Portal Settings", href: "/settings", icon: "⚙️" },
+    { name: "Dashboard", href: "/dashboard", icon: <LayoutDashboard size={18} /> },
+    { name: "Mock Tests", href: "/tests", icon: <FileText size={18} /> },
+    { name: "Study Resources", href: "/resources", icon: <BookOpen size={18} /> },
+    { name: "My Results", href: "/results", icon: <BarChart2 size={18} /> },
+    { name: "Portal Settings", href: "/settings", icon: <Settings size={18} /> },
   ];
 
   return (
@@ -27,12 +46,17 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
             <span className="text-[#1A1A1A]">MASTER</span><span className="text-[#D00113]">MOCKS</span>
           </span>
         </Link>
-        <button 
-          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          className="p-2 text-slate-600 hover:bg-slate-100 rounded-md text-xl"
-        >
-          {isMobileMenuOpen ? "✕" : "☰"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-md">
+            <Bell size={20} />
+          </button>
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 text-slate-600 hover:bg-slate-100 rounded-md"
+          >
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
       </header>
 
       {/* ─── MOBILE DROPDOWN MENU PANEL ─── */}
@@ -52,15 +76,15 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                       : "text-slate-600 hover:bg-slate-50"
                   }`}
                 >
-                  <span>{item.icon}</span>
+                  <span className={isActive ? "text-[#D00113]" : "text-slate-400"}>{item.icon}</span>
                   {item.name}
                 </Link>
               );
             })}
             <div className="pt-4 mt-2 border-t border-slate-100">
-              <Link href="/login" className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:text-red-600 transition-colors">
-                <span>🚪</span> Exit Workspace
-              </Link>
+              <button onClick={logout} className="w-full flex items-center gap-3 px-4 py-3 text-sm font-bold text-slate-500 hover:text-red-600 transition-colors">
+                <LogOut size={18} /> Exit Workspace
+              </button>
             </div>
           </nav>
         </div>
@@ -83,7 +107,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           {/* Nav Stack Links */}
           <nav className="space-y-1.5">
             {navigationItems.map((item) => {
-              const isActive = pathname === item.href;
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
               return (
                 <Link
                   key={item.href}
@@ -94,7 +118,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
                       : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                 >
-                  <span className="text-sm normal-case">{item.icon}</span>
+                  <span className={isActive ? "text-white" : "text-slate-400 group-hover:text-slate-900"}>
+                    {item.icon}
+                  </span>
                   {item.name}
                 </Link>
               );
@@ -102,20 +128,35 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
           </nav>
         </div>
 
-        {/* Workspace Foot Profile Link */}
-        <div className="border-t border-slate-100 pt-4">
-          <Link href="/login" className="flex items-center justify-between p-2 rounded-xl hover:bg-red-50 group transition-all">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-slate-900 text-white font-black text-xs flex items-center justify-center shadow-inner">
-                JD
+        <div className="space-y-4">
+          <div className="px-4 flex items-center justify-between text-slate-400">
+            <span className="text-xs font-bold uppercase">Notifications</span>
+            <button className="hover:text-slate-900 transition-colors">
+              <Bell size={16} />
+            </button>
+          </div>
+          
+          {/* Workspace Foot Profile Link */}
+          <div className="border-t border-slate-100 pt-4">
+            <div className="flex items-center justify-between p-2 rounded-xl group transition-all">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-slate-900 text-white font-black text-xs flex items-center justify-center shadow-inner uppercase overflow-hidden relative">
+                  {user?.avatar ? (
+                    <Image src={user.avatar} alt={user.name} fill className="object-cover" />
+                  ) : (
+                    getInitials(user?.name || "Student")
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-800 line-clamp-1">{user?.name}</p>
+                  <p className="text-[10px] font-medium text-slate-400">₹{user?.walletBalance?.toFixed(2) || "0.00"}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-bold text-slate-800 group-hover:text-slate-900">John Doe</p>
-                <p className="text-[10px] font-medium text-slate-400">ID: #89422</p>
-              </div>
+              <button onClick={logout} className="text-slate-400 hover:text-[#D00113] p-1 transition-colors" title="Logout">
+                <LogOut size={16} />
+              </button>
             </div>
-            <span className="text-slate-400 group-hover:text-[#D00113] text-xs font-bold transition-colors pr-1">🚪</span>
-          </Link>
+          </div>
         </div>
       </aside>
 
