@@ -14,11 +14,11 @@ export const courseService = {
   // Admin only
   create: (data: any) => apiClient.post<any, ApiResponse<Course>>("/courses", data),
   
-  update: (id: string, data: any) => apiClient.patch<any, ApiResponse<Course>>(`/courses/${id}`, data),
+  update: (id: string, data: any) => apiClient.put<any, ApiResponse<Course>>(`/courses/${id}`, data),
   
   delete: (id: string) => apiClient.delete<any, ApiResponse<null>>(`/courses/${id}`),
   
-  publish: (id: string) => apiClient.post<any, ApiResponse<Course>>(`/courses/${id}/publish`),
+  publish: (id: string) => apiClient.patch<any, ApiResponse<Course>>(`/courses/${id}/publish`),
   
-  unpublish: (id: string) => apiClient.post<any, ApiResponse<Course>>(`/courses/${id}/unpublish`),
+  unpublish: (id: string) => apiClient.patch<any, ApiResponse<Course>>(`/courses/${id}/unpublish`),
 };
