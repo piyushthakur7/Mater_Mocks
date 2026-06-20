@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 
 const registerSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -31,6 +31,7 @@ export default function StudentRegisterPage() {
   const router = useRouter();
   const { login: setAuthUser, isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!isAuthLoading && isAuthenticated) {
@@ -135,13 +136,22 @@ export default function StudentRegisterPage() {
 
         <div className="space-y-2">
           <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-slate-400">Password</Label>
-          <Input 
-            id="password"
-            type="password" 
-            placeholder="Create secure password" 
-            className="w-full text-sm px-4 py-6 rounded-lg border-slate-200 bg-slate-50/50 font-medium text-slate-800" 
-            {...form.register("password")}
-          />
+          <div className="relative">
+            <Input 
+              id="password"
+              type={showPassword ? "text" : "password"} 
+              placeholder="Create secure password" 
+              className="w-full text-sm px-4 py-6 pr-12 rounded-lg border-slate-200 bg-slate-50/50 font-medium text-slate-800" 
+              {...form.register("password")}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors focus:outline-none"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
           {form.formState.errors.password && (
             <p className="text-xs text-red-500 font-medium">{form.formState.errors.password.message}</p>
           )}

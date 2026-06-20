@@ -15,14 +15,14 @@ import { toast } from "sonner";
 import { Loader2, Eye, EyeOff } from "lucide-react";
 import { USER_ROLES } from "@/lib/constants";
 
-const loginSchema = z.object({
-  email: z.string().email({ message: "Please enter a valid email address." }),
+const adminLoginSchema = z.object({
+  email: z.string().email({ message: "Please enter a valid admin email address." }),
   password: z.string().min(1, { message: "Password is required." }),
 });
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+type AdminLoginFormValues = z.infer<typeof adminLoginSchema>;
 
-export default function StudentLoginPage() {
+export default function AdminLoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login: setAuthUser, isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
@@ -39,35 +39,37 @@ export default function StudentLoginPage() {
     }
   }, [isAuthLoading, isAuthenticated, user, router]);
 
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+  const form = useForm<AdminLoginFormValues>({
+    resolver: zodResolver(adminLoginSchema),
     defaultValues: {
       email: "",
       password: "",
     },
   });
 
-  const onSubmit = async (data: LoginFormValues) => {
+  const onSubmit = async (data: AdminLoginFormValues) => {
     setIsLoading(true);
     try {
-      const response = await authService.login(data);
+      const response = await authService.adminLogin(data);
       if (response.success && response.data) {
         setAuthUser(response.data.accessToken, response.data.user);
-        toast.success("Successfully logged in!");
+        toast.success("Successfully logged into Admin Portal!");
         
         const returnUrl = searchParams.get("returnUrl");
         if (returnUrl) {
           router.push(returnUrl);
-        } else if (response.data.user.role === USER_ROLES.ADMIN) {
-          router.push("/admin/dashboard");
         } else {
-          router.push("/dashboard");
+          router.push("/admin/dashboard");
         }
       } else {
         toast.error(response.message || "Invalid email or password.");
       }
     } catch (error: any) {
-      toast.error(error.message || "Failed to login. Please check your credentials.");
+      if (error.response?.status === 403) {
+        toast.error("Access Denied: You do not have admin privileges or your account is locked.");
+      } else {
+        toast.error(error.message || "Failed to login. Please check your credentials.");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -84,17 +86,17 @@ export default function StudentLoginPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div>
-        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Welcome Back Aspirant</h1>
-        <p className="text-sm text-slate-500 mt-1">Provide credentials to access dashboards and launch active mocks.</p>
+        <h1 className="text-2xl font-black text-slate-900 tracking-tight">Admin Portal Access</h1>
+        <p className="text-sm text-slate-500 mt-1">Provide administrator credentials to access the management portal.</p>
       </div>
 
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)}>
         <div className="space-y-2">
-          <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-slate-400">Email Address</Label>
+          <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-slate-400">Admin Email</Label>
           <Input 
             id="email"
             type="email" 
-            placeholder="name@example.com" 
+            placeholder="admin@example.com" 
             className="w-full text-sm px-4 py-6 rounded-lg border-slate-200 bg-slate-50/50 font-medium text-slate-800" 
             {...form.register("email")}
           />
@@ -134,20 +136,20 @@ export default function StudentLoginPage() {
         <Button 
           type="submit" 
           disabled={isLoading}
-          className="w-full py-6 bg-[#D00113] hover:bg-[#b0010f] text-white font-bold text-sm rounded-lg shadow-md transition-all mt-6"
+          className="w-full py-6 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-lg shadow-md transition-all mt-6"
         >
           {isLoading ? (
             <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Authenticating...</>
           ) : (
-            "Sign In to Portal"
+            "Sign In to Admin Portal"
           )}
         </Button>
       </form>
 
       <div className="text-center pt-4 border-t border-slate-100 text-xs text-slate-500 font-medium">
-        Don&apos;t have an account?{" "}
-        <Link href="/register" className="text-[#D00113] font-bold hover:underline">
-          Create Account Free
+        Not an admin?{" "}
+        <Link href="/login" className="text-slate-900 font-bold hover:underline">
+          Go to Student Login
         </Link>
       </div>
     </div>

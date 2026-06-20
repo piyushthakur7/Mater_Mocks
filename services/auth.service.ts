@@ -14,4 +14,6 @@ export const authService = {
   resetPassword: (token: string, data: any) => apiClient.post<any, ApiResponse<null>>(`/auth/reset-password/${token}`, data),
   
   changePassword: (data: any) => apiClient.post<any, ApiResponse<null>>("/auth/change-password", data),
+  
+  adminLogin: (data: any) => apiClient.post<any, ApiResponse<AuthData>>("/auth/admin-login", data),
 };

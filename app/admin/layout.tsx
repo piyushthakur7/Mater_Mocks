@@ -17,7 +17,7 @@ export default function AdminWorkspaceLayout({ children }: { children: React.Rea
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) {
-        router.push("/login");
+        router.push("/admin/login");
       } else if (!isAdmin) {
         router.push("/dashboard");
       }
